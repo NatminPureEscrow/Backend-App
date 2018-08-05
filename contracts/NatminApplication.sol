@@ -54,10 +54,9 @@ contract NatminTransation is Ownable {
 		uint256 _dollarAmount,
 		uint256 _tokenAmount,		
 		string _description,
-		bool _buyerPaid) public {
+		bool _buyerPaid) public ownerOnly {
 
-		// Requires the creator to be either the buyer or seller
-		require((_buyer == msg.sender) || (_seller == msg.sender));
+		// Requires the creator to be contract owner
 		require(_buyer != 0x0);
 		require(_seller != 0x0);
 		require(_endTime > 0); // Amount in days
