@@ -1,5 +1,7 @@
 pragma solidity ^0.4.22;
 
+import "./NatminToken.sol";
+
 contract NatminDispute is Ownable {
 	using SafeMath for uint256;
 

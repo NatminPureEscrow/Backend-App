@@ -1,32 +1,49 @@
 pragma solidity ^0.4.22;
 
-contract NatminTransation is Ownable {
-	using SafeMath for uint256;
+import "./NatminToken.sol";
 
-	uint256 private	transactionID;
+contract EscrowWallet is Ownable{
+	function transferTransactionAmounts(string _password) public;
+	function updateTransactionID(uint256 _transID) public;
+}
+
+contract NatminTransaction is Ownable {
+	using SafeMath for uint256;
 	
-	struct Transaction {
-		address creator;
+	uint256 transactionID;
+
+	struct TransactionDetails {
 		address buyer;
 		address seller;
 		uint256 createTime;
 		uint256 endTime;
-		uint256	dollarAmount;
-		uint256 tokenAmount;
-		//string shortDescription;
-		string description;
+		string category;
+		string description;		
+	}
+
+	struct TransactionStatus {
 		bool buyerPaid;
 		bool sellerSend;
 		bool buyerReceived;
 		bool completed;
-		uint256 gas;
+	}
+
+	struct TransactionFinance {		
+		uint256	dollarAmount;
+		uint256 tokenAmount;
+		uint256 feePercentage; // Fee %
+		uint256 sellerAmount;
+		address escrowWalletAddress;
 	}
 
 	struct TransactionIDList {
 		uint256[] ids;
 	}
+
 	// List of transactions created in the system
-	mapping(uint256 => Transaction) public transactions; 
+	mapping(uint256 => TransactionDetails) public transactionDetails; 
+	mapping(uint256 => TransactionStatus) public transactionStatus;
+	mapping(uint256 => TransactionFinance) public transactionFinance;
 
 	// List of transaction IDs for each user 
 	mapping(address => TransactionIDList) transactionIDLists;
@@ -35,13 +52,8 @@ contract NatminTransation is Ownable {
 		transactionID = 0;
 	}
 
-	// Increment the transaction ID
-	function createTransactionID() public returns (uint256) {
+	function createTransactionID () private ownerOnly returns (uint256) {
 		transactionID = transactionID.add(1);
-	}
-
-	// Returns the current transaction ID
-	function getTransactionID() public view returns (uint256) {
 		return transactionID;
 	}
 
@@ -50,73 +62,130 @@ contract NatminTransation is Ownable {
 		address _seller,
 		uint256 _endTime,
 		uint256 _dollarAmount,
-		uint256 _tokenAmount,		
+		uint256 _tokenAmount,
+		uint256 _feePercentage,		
+		string _category,
 		string _description,
-		bool _buyerPaid) public ownerOnly {
+		address _escrowWalletAddress) public returns (bool){
 
-		// Requires the creator to be contract owner
-		require(_buyer != 0x0);
-		require(_seller != 0x0);
-		require(_endTime > 0); // Amount in days
+		// Requires the creator to be escrow wallet
+		require(_buyer != address(0));
+		require(_seller != address(0));
+		require(_endTime > now); // Unix timestamp
 		require(_dollarAmount > 0);
 		require(_tokenAmount > 0);
-		//require(bytes(_shortDescription).length > 0);
+		require(_feePercentage > 0);
+		require(bytes(_category).length > 0);
+		require(bytes(_category).length <= 20);
 		require(bytes(_description).length > 0);
+		require(bytes(_description).length <= 200);
+		require(_escrowWalletAddress != address(0));
 
-		address _creator = msg.sender;
+		uint256 _transID = createTransactionID();
 
-		// Create and return the transaction ID to be used for this transaction.
-		createTransactionID();
-		uint256 _transID = getTransactionID();
-		
-		transactions[_transID].creator = _creator;
-		transactions[_transID].buyer = _buyer;
-		transactions[_transID].seller = _seller;
-		transactions[_transID].createTime = now;
-		transactions[_transID].endTime = _endTime;
-		transactions[_transID].dollarAmount = _dollarAmount;
-		transactions[_transID].tokenAmount = _tokenAmount;
-	    //transactions[_transID].shortDescription = _shortDescription;
-		transactions[_transID].description = _description;		
-		transactions[_transID].buyerPaid = _buyerPaid;
-		transactions[_transID].sellerSend = false;
-		transactions[_transID].buyerReceived = false;
-		transactions[_transID].completed = false;
-		transactions[_transID].gas = 0;
+		transactionDetails[_transID].buyer = _buyer;
+		transactionDetails[_transID].seller = _seller;
+		transactionDetails[_transID].createTime = now;
+		transactionDetails[_transID].endTime = _endTime;
+		transactionDetails[_transID].category = _category;
+		transactionDetails[_transID].description = _description;
+
+		transactionFinance[_transID].dollarAmount = _dollarAmount;
+		transactionFinance[_transID].tokenAmount = _tokenAmount;
+		transactionFinance[_transID].feePercentage = _feePercentage;
+		transactionFinance[_transID].sellerAmount = calculateSellerAmount(_tokenAmount,_feePercentage);
+		transactionFinance[_transID].escrowWalletAddress = _escrowWalletAddress;
+
+		transactionStatus[_transID].buyerPaid = false;
+		transactionStatus[_transID].sellerSend = false;
+		transactionStatus[_transID].buyerReceived = false;
+		transactionStatus[_transID].completed = false;
+
+		// Initiate the escrow wallet and update the transaction ID
+		EscrowWallet _escrowWallet = EscrowWallet(_escrowWalletAddress);
+		_escrowWallet.updateTransactionID(_transID);
 
 		// Add the transaction IDs to the list for each user	
 		createTransactionIDList(_seller,_transID);
 		createTransactionIDList(_buyer,_transID);
+
+		return true;
 	}
 
 	// Adding transaction IDs to the list for the specified user
-	function createTransactionIDList(address _user, uint256 _transactionID) internal {
+	function createTransactionIDList(address _user, uint256 _transactionID) internal ownerOnly {
 		transactionIDLists[_user].ids.push(_transactionID);
 	}
 
 	// Returns the list of transaction IDs for a specified user
-	function getTransactionIDList(address _user) public view returns (uint256[]) {
+	function getTransactionIDList(address _user) public view ownerOnly returns (uint256[]) {
 		return transactionIDLists[_user].ids;
 	}
 
-	// Update the calculated gas for each transaction interaction
-	function updateTransactionGas(uint256 _transID, uint256 _calculatedGas) public {
-		transactions[_transID].gas = transactions[_transID].gas.add(_calculatedGas);
+	// Update the transaction after the buyer has funded the transaction
+	function updateTransactionBuyerPaid(uint256 _transID) public returns (bool) {
+		require(transactionFinance[_transID].escrowWalletAddress == msg.sender);
+		transactionStatus[_transID].buyerPaid = true;
+		return true;
 	}
 
-	function updateTransactionBuyerPaid(uint256 _transID) public ownerOnly {
-		transactions[_transID].buyerPaid = true;
+	// Update the transaction after the seller confirms the items are sent
+	function updateTransactionSellerSend(uint256 _transID) public ownerOnly returns (bool) {
+		require(transactionStatus[_transID].buyerPaid == true);
+		transactionStatus[_transID].sellerSend = true;
+		return true;
 	}
 
-	function updateTransactionSellerSend(uint256 _transID) public ownerOnly {
-		transactions[_transID].sellerSend = true;
+	// Update the transaction after buyer confirms th receipt of items
+	// This will also complete the transaction and transfers the money to the seller 
+	function updateTransactionBuyerReceived(
+		uint256 _transID, 
+		string _password) public ownerOnly returns (bool) {
+		require(transactionStatus[_transID].sellerSend == true);
+		EscrowWallet _escrowWallet = EscrowWallet(transactionFinance[_transID].escrowWalletAddress);
+		_escrowWallet.transferTransactionAmounts(_password);
+		transactionStatus[_transID].buyerReceived = true;
+		transactionStatus[_transID].completed = true;
+		return true;
 	}
 
-	function updateTransactionBuyerReceived(uint256 _transID) public ownerOnly {
-		transactions[_transID].buyerReceived = true;
+	// Returns the transaction token amount
+	function getTransactionAmount(uint256 _transID) public view returns (uint256) {
+		return transactionFinance[_transID].tokenAmount;
 	}
 
-	function updateTransactionCompleted(uint256 _transID) public ownerOnly {
-		transactions[_transID].completed = true;
+	// Returns the calculated seller token amount
+	function getSellerAmount(uint256 _transID) public view returns (uint256) {
+		return transactionFinance[_transID].sellerAmount;
+	}
+
+	// Returns the address of the buyer 
+	function getTransactionBuyer(uint256 _transID) public view returns (address) {
+		return transactionDetails[_transID].buyer;
+	}
+
+	// Returns the address of the seller 
+	function getTransactionSeller(uint256 _transID) public view returns (address) {
+		return transactionDetails[_transID].seller;
+	}
+
+	// Returns the status of buyerPaid
+	function getTransactionBuyerPaid(uint256 _transID) public view returns (bool) {
+		return transactionStatus[_transID].buyerPaid;
+	}
+
+	// Calculates and returns the seller amount.
+	// Total token amount minus the fees
+	function calculateSellerAmount(
+		uint256 _tokenAmount, 
+		uint256 _feePercentage) internal view ownerOnly returns (uint256) {
+
+		uint256 _fees = _tokenAmount.mul(_feePercentage).div(100);
+		return _tokenAmount.sub(_fees);
+	}
+
+	// Update the transaction with the nominated escrow wallet
+	function updateEscrowWallet(uint256 _transID, address _escrowWalletAddress) public ownerOnly {
+		transactionFinance[_transID].escrowWalletAddress = _escrowWalletAddress;
 	}
 }
