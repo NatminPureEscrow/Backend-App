@@ -1,10 +1,10 @@
 pragma solidity ^0.4.22;
 
-import "./NatminToken.sol";
+import "./Ownable.sol";
 
 contract EscrowWallet is Ownable{
-	function transferTransactionAmounts(string _password) public;
-	function updateTransactionID(uint256 _transID) public;
+	function transferTransactionAmounts(string _password) public returns (bool);
+	function updateTransactionID(uint256 _transID) public returns (bool);
 }
 
 contract NatminTransaction is Ownable {
@@ -13,10 +13,11 @@ contract NatminTransaction is Ownable {
 	uint256 transactionID;
 
 	struct TransactionDetails {
+		address creator;
 		address buyer;
 		address seller;
 		uint256 createTime;
-		uint256 endTime;
+		uint256 inspectionPeriod;
 		string category;
 		string description;		
 	}
@@ -58,9 +59,10 @@ contract NatminTransaction is Ownable {
 	}
 
 	function createTransaction(
+		address _creator,
 		address _buyer,
 		address _seller,
-		uint256 _endTime,
+		uint256 _inspectionPeriod,
 		uint256 _dollarAmount,
 		uint256 _tokenAmount,
 		uint256 _feePercentage,		
@@ -69,24 +71,21 @@ contract NatminTransaction is Ownable {
 		address _escrowWalletAddress) public returns (bool){
 
 		// Requires the creator to be escrow wallet
+		require(_creator != address(0));
 		require(_buyer != address(0));
 		require(_seller != address(0));
-		require(_endTime > now); // Unix timestamp
 		require(_dollarAmount > 0);
 		require(_tokenAmount > 0);
 		require(_feePercentage > 0);
-		require(bytes(_category).length > 0);
-		require(bytes(_category).length <= 20);
-		require(bytes(_description).length > 0);
-		require(bytes(_description).length <= 200);
 		require(_escrowWalletAddress != address(0));
 
 		uint256 _transID = createTransactionID();
 
+		transactionDetails[_transID].creator = _creator;
 		transactionDetails[_transID].buyer = _buyer;
 		transactionDetails[_transID].seller = _seller;
 		transactionDetails[_transID].createTime = now;
-		transactionDetails[_transID].endTime = _endTime;
+		transactionDetails[_transID].inspectionPeriod = _inspectionPeriod;
 		transactionDetails[_transID].category = _category;
 		transactionDetails[_transID].description = _description;
 
@@ -103,13 +102,17 @@ contract NatminTransaction is Ownable {
 
 		// Initiate the escrow wallet and update the transaction ID
 		EscrowWallet _escrowWallet = EscrowWallet(_escrowWalletAddress);
-		_escrowWallet.updateTransactionID(_transID);
+		require(_escrowWallet.updateTransactionID(_transID));
 
 		// Add the transaction IDs to the list for each user	
 		createTransactionIDList(_seller,_transID);
 		createTransactionIDList(_buyer,_transID);
 
 		return true;
+	}
+
+	function getTransactionID() public view returns (uint256) {
+		return transactionID;
 	}
 
 	// Adding transaction IDs to the list for the specified user
@@ -137,14 +140,27 @@ contract NatminTransaction is Ownable {
 	}
 
 	// Update the transaction after buyer confirms th receipt of items
+	function updateTransactionBuyerReceived(uint256 _transID) public ownerOnly returns (bool) {
+		require(transactionStatus[_transID].buyerPaid == true);
+		require(transactionStatus[_transID].sellerSend == true);
+		require(transactionStatus[_transID].buyerReceived == false);
+
+		transactionStatus[_transID].buyerReceived = true;
+		return true;
+	}
+
 	// This will also complete the transaction and transfers the money to the seller 
-	function updateTransactionBuyerReceived(
+	function updateTransactionCompleted(
 		uint256 _transID, 
 		string _password) public ownerOnly returns (bool) {
+		require(transactionStatus[_transID].buyerPaid == true);
 		require(transactionStatus[_transID].sellerSend == true);
+		require(transactionStatus[_transID].buyerReceived == true);
+		require(transactionStatus[_transID].completed == false);
+
 		EscrowWallet _escrowWallet = EscrowWallet(transactionFinance[_transID].escrowWalletAddress);
-		_escrowWallet.transferTransactionAmounts(_password);
-		transactionStatus[_transID].buyerReceived = true;
+		require(_escrowWallet.transferTransactionAmounts(_password));
+
 		transactionStatus[_transID].completed = true;
 		return true;
 	}
@@ -185,7 +201,10 @@ contract NatminTransaction is Ownable {
 	}
 
 	// Update the transaction with the nominated escrow wallet
+	// Initiate the escrow wallet and update the transaction ID
 	function updateEscrowWallet(uint256 _transID, address _escrowWalletAddress) public ownerOnly {
-		transactionFinance[_transID].escrowWalletAddress = _escrowWalletAddress;
+		transactionFinance[_transID].escrowWalletAddress = _escrowWalletAddress;		
+		EscrowWallet _escrowWallet = EscrowWallet(_escrowWalletAddress);
+		require(_escrowWallet.updateTransactionID(_transID));
 	}
 }
