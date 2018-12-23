@@ -1,6 +1,6 @@
 pragma solidity ^0.4.22;
 
-import "./Ownable.sol";
+import "./GeneralContract.sol";
 
 contract EscrowWallet is Ownable{
 	function transferTransactionAmounts(string _password) public returns (bool);
