@@ -1,20 +1,41 @@
 pragma solidity ^0.4.22;
 
-import "./NatminToken.sol";
+import "./GeneralContract.sol";
 
 contract NatminVote is Ownable {
 	using SafeMath for uint256;
 
 	uint256 public voteID;
+	GeneralContract settings;
 
-	mapping(uint256 => uint256) public voteCount;
+	struct NodeGroup {
 
-	constructor () public {
-		voteID = 0;
+		Vote1
 	}
 
+	struct VoteDetail {
+		bool created;
+		uint256 date;
+		uint256 yes;
+		uint256 no;
+		bool voteResult;
+		
+	}
+
+	struct VoteCount {
+		
+	}
+
+	// Keeps a mapping of the vote count for each vote ID 
+	mapping(uint256 => VoteCount[]) public voteCount;
+
 	// List of votes cast for each dispute
-	mapping(uint256 => mapping(address => bool)) public votes;
+	mapping(uint256 => VoteDetail[]) public votes;
+
+	constructor (address _generalContract) public {
+		voteID = 0;
+		settings = GeneralContract(_generalContract);
+	}	
 
 	// Increment the current vote ID
 	function createVoteID () public {
@@ -28,14 +49,12 @@ contract NatminVote is Ownable {
 
 	// Create a vote in the vote list
 	function createVote(uint256 _voteID, address _user, bool _vote) public {
-		require(voteCount[_voteID] < 5);		
-		votes[_voteID][_user] = _vote;
-		increaseVoteCount(_voteID);
+		
 	}
 
 	// Returns the vote cast for a specified user and transaction 
 	function getVote(uint256 _voteID, address _user) public view returns (bool) {
-		return votes[_voteID][_user];
+		//return votes[_voteID][_user];
 	}
 
 	// Increased the vote count for a specified vote upto a count of 5

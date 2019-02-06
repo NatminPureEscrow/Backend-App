@@ -9,6 +9,7 @@ contract NatminNodes is Ownable {
 	GeneralContract settings;
 
 	struct NodeDetail {
+		bool created;
 		string category;
 		uint256 stake;
 		bool blacklist;
@@ -35,14 +36,26 @@ contract NatminNodes is Ownable {
 		require(bytes(_category).length > 0); // Category char length must be larger than 0
 		require(_nodeAddress != 0x0); // Adddress must not be address 0
 		require(_stake >= MinStake); //The stake amount must the larger than min take
-		require(Nodes[_nodeAddress].blacklist != true); // Prevents the creation of a blacklisted address
+		require(Nodes[_nodeAddress].created == false); // Prevents the creation of an already created node/address
+		require(Nodes[_nodeAddress].blacklist == false); // Prevents the creation of a blacklisted address
 		
-		address _tokenAddress = settings.getSettingAddress('TokenContract');
+		address _tokenAddress = settings.getSettingAddress('TokenAddress');
 		ERC20Standard _token = ERC20Standard(_tokenAddress);
 		require(_token.balanceOf(_nodeAddress) >= _stake); // Requries the current balance to be greater than stake
 		
+		Nodes[_nodeAddress].created = true;
 		Nodes[_nodeAddress].category = _category;
 		Nodes[_nodeAddress].stake = _stake;
+		Nodes[_nodeAddress].blacklist = false;
+		Nodes[_nodeAddress].pointsReceived = 0;
+		Nodes[_nodeAddress].pointsLost = 0;
+	}
+
+	// Removes the select node and clears all reputation 
+	function deleteNode(address _nodeAddress) public ownerOnly returns (bool){
+		Nodes[_nodeAddress].created = false;
+		Nodes[_nodeAddress].category = '';
+		Nodes[_nodeAddress].stake = 0;
 		Nodes[_nodeAddress].blacklist = false;
 		Nodes[_nodeAddress].pointsReceived = 0;
 		Nodes[_nodeAddress].pointsLost = 0;
@@ -51,7 +64,10 @@ contract NatminNodes is Ownable {
 	// Add 2 points for for reach correct vote
 	// This can only be updated from the dispute contract 
 	function addPoints(address _nodeAddress) public returns (bool) {
-		//require(msg.sender == settings.getSettingAddress('DisputeContract'));
+		address _disputeContract = settings.getSettingAddress('DisputeContract');
+		require((msg.sender == contractOwner) || (msg.sender == _disputeContract));
+		require(Nodes[_nodeAddress].blacklist == false);
+
 		Nodes[_nodeAddress].pointsReceived = Nodes[_nodeAddress].pointsReceived.add(2);
 		return true;
 	}
@@ -59,7 +75,10 @@ contract NatminNodes is Ownable {
 	// Removes 1 point for for reach incorrect vote
 	// This can only be updated from the dispute contract 
 	function removePoints(address _nodeAddress) public returns (bool) {
-		//require(msg.sender == settings.getSettingAddress('DisputeContract'));
+		address _disputeContract = settings.getSettingAddress('DisputeContract');
+		require((msg.sender == contractOwner) || (msg.sender == _disputeContract));
+		require(Nodes[_nodeAddress].blacklist == false);
+
 		Nodes[_nodeAddress].pointsLost = Nodes[_nodeAddress].pointsLost.add(1);
 		if(Nodes[_nodeAddress].pointsLost >= 3){
 			Nodes[_nodeAddress].blacklist = true;
@@ -75,5 +94,23 @@ contract NatminNodes is Ownable {
 		Nodes[_nodeAddress].stake = _stake;
 
 		return true;
+	}
+
+	// Mnually blacklist a node
+	function blacklistNode(address _nodeAddress) public ownerOnly {
+		require(Nodes[_nodeAddress].created == true);
+		Nodes[_nodeAddress].blacklist = true;
+	}
+
+	// Checks to see if node is created and not blacklisted
+	function validateNode(address _nodeAddress) public view returns (bool) {
+		bool _created = Nodes[_nodeAddress].created;
+		bool _blacklist = Nodes[_nodeAddress].blacklist;
+		if((_created == true) && (_blacklist == false)) {
+			return true;
+		}
+		else{
+			return false;
+		}
 	}
 }

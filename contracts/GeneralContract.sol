@@ -13,6 +13,11 @@ contract ERC20Standard {
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 }
 
+// ERC223 Standard functions
+contract ERC223 {
+    function transfer(address _to, uint256 _value) public returns (bool success); 
+}
+
 
 // This contact sets the list of general settings used by all contracts 
 contract GeneralContract is Ownable {

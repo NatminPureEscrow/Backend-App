@@ -1,20 +1,17 @@
 pragma solidity ^0.4.22;
 
-import "./NatminToken.sol";
+import "./GeneralContract.sol";
 
 contract NatminDispute is Ownable {
 	using SafeMath for uint256;
 
 	uint256 private disputeID;
-	NatminVote internal Votes;
+	GeneralContract settings;
 
 	struct Dispute {
 		uint256 transactionID;		
 		address creator;		
-		address buyer;
-		address seller;	
 		uint256 createTime;
-		uint256 endTime;
 		string 	description;
 		bool 	resolved;
 		uint256 firstVoteID;
@@ -32,9 +29,9 @@ contract NatminDispute is Ownable {
 	// List of disputes for each user
 	mapping(address => DisputeIDList) private disputesIDLists;
 
-	constructor(NatminVote _natminVoteContract) public {
+	constructor(address _generalContract) public {
 		disputeID = 0;
-		Votes = _natminVoteContract;
+		settings = GeneralContract(_generalContract);
 	}
 
 	// Increment the dispute ID
@@ -59,13 +56,11 @@ contract NatminDispute is Ownable {
 
 	function createDispute(
 		uint256 _transactionID,
-		address _buyer,
-		address _seller,
+		address _creator,
 		string 	_description) public ownerOnly {
 
 		require(_transactionID > 0);
-		require(_buyer != 0x0);
-		require(_seller != 0x0);		
+		require(_creator != 0x0);		
 		require(bytes(_description).length > 0);
 
 		// Create dispute ID for the current dispute
@@ -83,7 +78,6 @@ contract NatminDispute is Ownable {
 		disputes[_disputeID].buyer = _buyer;
 		disputes[_disputeID].seller = _seller;
 		disputes[_disputeID].createTime = now;
-		disputes[_disputeID].endTime = now + 7 days;
 		disputes[_disputeID].resolved = false;
 		disputes[_disputeID].voteCount = 0;		
 		disputes[_disputeID].firstVoteID = _firstVoteID;
