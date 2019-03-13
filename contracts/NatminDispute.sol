@@ -5,7 +5,6 @@ import "./GeneralContract.sol";
 contract NatminDispute is Ownable {
 	using SafeMath for uint256;
 
-	uint256 private disputeID;
 	GeneralContract settings;
 
 	struct Dispute {

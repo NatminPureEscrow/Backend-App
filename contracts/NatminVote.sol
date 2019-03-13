@@ -5,66 +5,56 @@ import "./GeneralContract.sol";
 contract NatminVote is Ownable {
 	using SafeMath for uint256;
 
-	uint256 public voteID;
 	GeneralContract settings;
-
-	struct NodeGroup {
-
-		Vote1
-	}
 
 	struct VoteDetail {
 		bool created;
-		uint256 date;
-		uint256 yes;
-		uint256 no;
-		bool voteResult;
-		
+		bool voteResult;		
 	}
-
-	struct VoteCount {
-		
-	}
-
-	// Keeps a mapping of the vote count for each vote ID 
-	mapping(uint256 => VoteCount[]) public voteCount;
 
 	// List of votes cast for each dispute
-	mapping(uint256 => VoteDetail[]) public votes;
+	mapping(uint256 => mapping(address => VoteDetail)) public votes;
+
+	mapping(uint256 => uint256) public voteCount;
 
 	constructor (address _generalContract) public {
-		voteID = 0;
 		settings = GeneralContract(_generalContract);
 	}	
 
-	// Increment the current vote ID
-	function createVoteID () public {
-		voteID = voteID.add(1);
-	}
-
-	// Returns the current vote ID
-	function getVoteID () public view returns (uint256) {
-		return voteID;
-	}
 
 	// Create a vote in the vote list
-	function createVote(uint256 _voteID, address _user, bool _vote) public {
+	function createVote(
+		uint256 _disputeID, 
+		address _nodeAddress, 
+		uint256 _voteResult,
+		uint256 _paymentDue,
+		uint256 _tokenAmount) public ownerOnly returns (bool) {
+
+		require(votes[_disputeID][_nodeAddress].created == false);
+		require(voteCount[_disputeID] < 5);
+
+		votes[_disputeID][_nodeAddress].created = true;
 		
+		if(_voteResult == 1) {
+			votes[_disputeID][_nodeAddress].voteResult = true;
+		} else {
+			votes[_disputeID][_nodeAddress].voteResult = false;
+		}
+
+		voteCount[_disputeID] = voteCount[_disputeID].add(1);
+
+		if(_paymentDue == 1) {
+			require(payNode(_nodeAddress, _tokenAmount));
+		}
+
+		return true;
 	}
 
-	// Returns the vote cast for a specified user and transaction 
-	function getVote(uint256 _voteID, address _user) public view returns (bool) {
-		//return votes[_voteID][_user];
-	}
+	function payNode(address _nodeAddress, uint256 _tokenAmount) internal ownerOnly returns (bool) {
+		address _tokenAddress = settings.getSettingAddress('TokenContract');
+		ERC20Standard _tokenContract = ERC20Standard(_tokenAddress);
+		require(_tokenContract.transfer(_nodeAddress, _tokenAmount));
 
-	// Increased the vote count for a specified vote upto a count of 5
-	function increaseVoteCount(uint256 _voteID) public {
-		require(voteCount[_voteID] < 5);
-		voteCount[_voteID] = voteCount[_voteID].add(1);
-	}
-
-	// Returns the current vote count for a specified vote ID
-	function getVoteCount(uint256 _voteID) public view returns (uint256) {
-		return voteCount[_voteID];
+		return true;
 	}
 }
