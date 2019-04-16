@@ -32,7 +32,7 @@ contract NatminTransaction is Ownable {
 		uint256 _transID,
 		address _buyer,
 		address _seller,
-		string _details) public returns (bool){
+		string _details) public ownerOnly returns (bool){
 
 		require(_transID > 0);
 		require(_buyer != address(0));
