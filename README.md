@@ -4,4 +4,4 @@ Natmin Pure Escrow is a decentralized application that provides pure Escrow Serv
 
 Natmin is a self-regulating system that provides secure transactions between the buyer and seller with extremely low fees. Natmin utilizes smart contract technology to implement and regulate Escrow transactions. This removes the need for a middleman, thus reducing transaction costs and the possibility of fraud.
 
-The Natmin Token (NAT) ensures utmost security and peace of mind between the buyer and seller. It is built on the widely used and accepted ERC20 standard using the Ethereum Blockchain.
+The Natmin Token (NAT) ensures utmost security and peace of mind between the buyer and seller. It is built on the widely used and accepted ERC223 standard using the Ethereum Blockchain.
